@@ -15,43 +15,69 @@ AUDIO_OGG="/tmp/diktuy_speech.ogg"
 PID_FILE="/tmp/diktuy_record.pid"
 LOG_FILE="/tmp/diktuy.log"
 LOCK_FILE="/tmp/diktuy.lock"
-NOTIFY_ID_FILE="/tmp/diktuy_notification_id"
+INDICATOR_PID_FILE="/tmp/diktuy_indicator.pid"
 
 # Silent notifications: Cinnamon understands the suppress-sound hint
 notify() {
     notify-send -h boolean:suppress-sound:true "$@"
 }
 
-# Persistent notification that stays until the second key press
+# Persistent on-screen indicator, closed on the second key press
 show_recording_indicator() {
     close_recording_indicator
-    local id
-    id=$(gdbus call --session --dest org.freedesktop.Notifications \
-        --object-path /org/freedesktop/Notifications \
-        --method org.freedesktop.Notifications.Notify \
-        "Dictation" 0 "media-record" "Recording" \
-        "Press the key again to stop" [] "{'suppress-sound': <true>}" 0 2>/dev/null \
-        | awk '{print $2}' | tr -d ',)')
+    local previous_window pid win primary mw mh mx my ww wh
+    previous_window=$(xdotool getactivewindow 2>/dev/null)
 
-    case "$id" in
-        ''|*[!0-9]*) id="" ;;
-    esac
+    zenity --progress --pulsate --no-cancel --title="Diktuy Recording" \
+        --text="Recording... Press the key again to stop" \
+        --width=260 --height=100 9>&- >/dev/null 2>&1 &
+    pid=$!
+    printf '%s' "$pid" > "$INDICATOR_PID_FILE"
 
-    if [ -n "$id" ]; then
-        printf '%s' "$id" > "$NOTIFY_ID_FILE"
-    else
+    for _ in {1..30}; do
+        win=$(xdotool search --onlyvisible --name '^Diktuy Recording$' 2>/dev/null | head -n1)
+        [ -n "$win" ] && break
+        sleep 0.05
+    done
+
+    if [ -z "$win" ]; then
         notify "Dictation" "Recording... Press the key AGAIN to send" -t 2000 -i audio-input-microphone
+        return 0
     fi
+
+    wmctrl -i -r "$win" -b add,above,skip_taskbar,skip_pager
+
+    primary=$(xrandr --query 2>/dev/null | grep ' connected primary ' | grep -oE '[0-9]+x[0-9]+\+[0-9]+\+[0-9]+' | head -n1)
+    if [ -n "$primary" ]; then
+        mw=${primary%%x*}
+        primary=${primary#*x}
+        mh=${primary%%+*}
+        primary=${primary#*+}
+        mx=${primary%%+*}
+        my=${primary#*+}
+        ww=$(xdotool getwindowgeometry --shell "$win" 2>/dev/null | awk -F= '/^WIDTH=/{print $2}')
+        wh=$(xdotool getwindowgeometry --shell "$win" 2>/dev/null | awk -F= '/^HEIGHT=/{print $2}')
+        ww=${ww:-284}
+        wh=${wh:-158}
+        wmctrl -i -r "$win" -e "0,$((mx + (mw - ww) / 2)),$((my + mh - wh - 120)),-1,-1"
+    fi
+
+    [ -n "$previous_window" ] && xdotool windowactivate "$previous_window" 2>/dev/null
 }
 
 close_recording_indicator() {
-    if [ -f "$NOTIFY_ID_FILE" ]; then
-        local id
-        id=$(cat "$NOTIFY_ID_FILE")
-        gdbus call --session --dest org.freedesktop.Notifications \
-            --object-path /org/freedesktop/Notifications \
-            --method org.freedesktop.Notifications.CloseNotification "$id" >/dev/null 2>&1
-        rm -f "$NOTIFY_ID_FILE"
+    if [ -f "$INDICATOR_PID_FILE" ]; then
+        local pid
+        pid=$(cat "$INDICATOR_PID_FILE")
+        if kill -0 "$pid" 2>/dev/null && [ "$(ps -p "$pid" -o comm= 2>/dev/null)" = "zenity" ]; then
+            kill "$pid" 2>/dev/null
+            for _ in {1..10}; do
+                kill -0 "$pid" 2>/dev/null || break
+                sleep 0.05
+            done
+            kill -9 "$pid" 2>/dev/null
+        fi
+        rm -f "$INDICATOR_PID_FILE"
     fi
 }
 
