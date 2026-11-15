@@ -25,7 +25,7 @@ notify() {
 # Persistent on-screen indicator, closed on the second key press
 show_recording_indicator() {
     close_recording_indicator
-    local previous_window pid win primary mw mh mx my ww wh
+    local previous_window pid win primary mw mx my ww
     previous_window=$(xdotool getactivewindow 2>/dev/null)
 
     zenity --progress --pulsate --no-cancel --title="Diktuy Recording" \
@@ -50,16 +50,12 @@ show_recording_indicator() {
     primary=$(xrandr --query 2>/dev/null | grep ' connected primary ' | grep -oE '[0-9]+x[0-9]+\+[0-9]+\+[0-9]+' | head -n1)
     if [ -n "$primary" ]; then
         mw=${primary%%x*}
-        primary=${primary#*x}
-        mh=${primary%%+*}
-        primary=${primary#*+}
-        mx=${primary%%+*}
-        my=${primary#*+}
+        mx=${primary#*+}
+        mx=${mx%%+*}
+        my=${primary##*+}
         ww=$(xdotool getwindowgeometry --shell "$win" 2>/dev/null | awk -F= '/^WIDTH=/{print $2}')
-        wh=$(xdotool getwindowgeometry --shell "$win" 2>/dev/null | awk -F= '/^HEIGHT=/{print $2}')
         ww=${ww:-284}
-        wh=${wh:-158}
-        wmctrl -i -r "$win" -e "0,$((mx + (mw - ww) / 2)),$((my + mh - wh - 120)),-1,-1"
+        wmctrl -i -r "$win" -e "0,$((mx + mw - ww - 40)),$((my + 40)),-1,-1"
     fi
 
     [ -n "$previous_window" ] && xdotool windowactivate "$previous_window" 2>/dev/null
