@@ -25,12 +25,25 @@ notify() {
 # Persistent on-screen indicator, closed on the second key press
 show_recording_indicator() {
     close_recording_indicator
-    local previous_window pid win primary mw mx my ww
+    local previous_window pid win primary mw mx my x y
+    local -a geometry
     previous_window=$(xdotool getactivewindow 2>/dev/null)
 
-    zenity --progress --pulsate --no-cancel --title="Diktuy Recording" \
-        --text="Recording... Press the key again to stop" \
-        --width=260 --height=100 9>&- >/dev/null 2>&1 &
+    primary=$(xrandr --query 2>/dev/null | grep ' connected primary ' | grep -oE '[0-9]+x[0-9]+\+[0-9]+\+[0-9]+' | head -n1)
+    if [ -n "$primary" ]; then
+        mw=${primary%%x*}
+        mx=${primary#*+}
+        mx=${mx%%+*}
+        my=${primary##*+}
+        x=$((mx + mw - 300 - 40))
+        y=$((my + 40))
+        geometry=(-geometry "300x80+${x}+${y}")
+    fi
+
+    xmessage -name DiktuyRecording -title "Diktuy Recording" \
+        -buttons "" -borderwidth 0 -bg '#202020' -fg '#ff5555' \
+        "${geometry[@]}" "REC  Press the key again to stop" \
+        9>&- >/dev/null 2>&1 &
     pid=$!
     printf '%s' "$pid" > "$INDICATOR_PID_FILE"
 
@@ -46,18 +59,6 @@ show_recording_indicator() {
     fi
 
     wmctrl -i -r "$win" -b add,above,skip_taskbar,skip_pager
-
-    primary=$(xrandr --query 2>/dev/null | grep ' connected primary ' | grep -oE '[0-9]+x[0-9]+\+[0-9]+\+[0-9]+' | head -n1)
-    if [ -n "$primary" ]; then
-        mw=${primary%%x*}
-        mx=${primary#*+}
-        mx=${mx%%+*}
-        my=${primary##*+}
-        ww=$(xdotool getwindowgeometry --shell "$win" 2>/dev/null | awk -F= '/^WIDTH=/{print $2}')
-        ww=${ww:-284}
-        wmctrl -i -r "$win" -e "0,$((mx + mw - ww - 40)),$((my + 40)),-1,-1"
-    fi
-
     [ -n "$previous_window" ] && xdotool windowactivate "$previous_window" 2>/dev/null
 }
 
@@ -65,7 +66,7 @@ close_recording_indicator() {
     if [ -f "$INDICATOR_PID_FILE" ]; then
         local pid
         pid=$(cat "$INDICATOR_PID_FILE")
-        if kill -0 "$pid" 2>/dev/null && [ "$(ps -p "$pid" -o comm= 2>/dev/null)" = "zenity" ]; then
+        if kill -0 "$pid" 2>/dev/null && [ "$(ps -p "$pid" -o comm= 2>/dev/null)" = "xmessage" ]; then
             kill "$pid" 2>/dev/null
             for _ in {1..10}; do
                 kill -0 "$pid" 2>/dev/null || break
