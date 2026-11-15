@@ -15,10 +15,44 @@ AUDIO_OGG="/tmp/diktuy_speech.ogg"
 PID_FILE="/tmp/diktuy_record.pid"
 LOG_FILE="/tmp/diktuy.log"
 LOCK_FILE="/tmp/diktuy.lock"
+NOTIFY_ID_FILE="/tmp/diktuy_notification_id"
 
 # Silent notifications: Cinnamon understands the suppress-sound hint
 notify() {
     notify-send -h boolean:suppress-sound:true "$@"
+}
+
+# Persistent notification that stays until the second key press
+show_recording_indicator() {
+    close_recording_indicator
+    local id
+    id=$(gdbus call --session --dest org.freedesktop.Notifications \
+        --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.Notify \
+        "Dictation" 0 "media-record" "Recording" \
+        "Press the key again to stop" [] "{'suppress-sound': <true>}" 0 2>/dev/null \
+        | awk '{print $2}' | tr -d ',)')
+
+    case "$id" in
+        ''|*[!0-9]*) id="" ;;
+    esac
+
+    if [ -n "$id" ]; then
+        printf '%s' "$id" > "$NOTIFY_ID_FILE"
+    else
+        notify "Dictation" "Recording... Press the key AGAIN to send" -t 2000 -i audio-input-microphone
+    fi
+}
+
+close_recording_indicator() {
+    if [ -f "$NOTIFY_ID_FILE" ]; then
+        local id
+        id=$(cat "$NOTIFY_ID_FILE")
+        gdbus call --session --dest org.freedesktop.Notifications \
+            --object-path /org/freedesktop/Notifications \
+            --method org.freedesktop.Notifications.CloseNotification "$id" >/dev/null 2>&1
+        rm -f "$NOTIFY_ID_FILE"
+    fi
 }
 
 # Single instance at a time: protects against double presses
@@ -32,6 +66,7 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; t
     # ==========================================
     # STOP AND UPLOAD
     # ==========================================
+    close_recording_indicator
     PID=$(cat "$PID_FILE")
 
     # Let the last syllable reach the buffer, then stop arecord
@@ -140,5 +175,5 @@ else
 
     echo "$REC_PID" > "$PID_FILE"
 
-    notify "Dictation" "Recording... Press the key AGAIN to send" -t 2000 -i audio-input-microphone
+    show_recording_indicator
 fi
