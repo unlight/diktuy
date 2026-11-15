@@ -20,7 +20,7 @@ A small Linux dictation script for the [Diktuy](https://diktuy.ru) speech-to-tex
 On Debian/Ubuntu/Mint:
 
 ```bash
-sudo apt install alsa-utils sox libsox-fmt-ogg curl xclip xdotool wmctrl x11-utils x11-xserver-utils libnotify-bin
+sudo apt install alsa-utils sox libsox-fmt-all curl xclip xdotool wmctrl x11-utils x11-xserver-utils libnotify-bin
 ```
 
 ## Install
