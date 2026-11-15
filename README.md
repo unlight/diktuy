@@ -47,12 +47,6 @@ Bind a key in your desktop environment to:
 bash -lc '/path/to/diktuy/diktuy.sh'
 ```
 
-Replace `/path/to/diktuy` with the clone directory. If you cloned to `~/Dev/diktuy`, use:
-
-```bash
-bash -lc "$HOME/Dev/diktuy/diktuy.sh"
-```
-
 In Cinnamon: Settings → Keyboard → Shortcuts → Custom Shortcuts → Add.
 
 The first press starts recording; the second press stops it and pastes the text. The script itself does not choose the key.
