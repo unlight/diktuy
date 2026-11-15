@@ -7,7 +7,6 @@ A small Linux dictation script for the [Diktuy](https://diktuy.ru) speech-to-tex
 - Toggle recording with one hotkey: first press starts, second press stops.
 - Persistent on-screen indicator in the top-right corner of the primary monitor.
 - Sends OGG audio to Diktuy with `language=auto` and a configurable term prompt.
-- Records OGG Vorbis directly with `ffmpeg`; no raw PCM temp file.
 - Restores the previous clipboard after pasting.
 - Silent desktop notifications for errors and progress.
 - Small Bash script; no Python, no daemon.
@@ -16,12 +15,12 @@ A small Linux dictation script for the [Diktuy](https://diktuy.ru) speech-to-tex
 
 - Linux with X11 (tested on Cinnamon).
 - A Diktuy API key.
-- `ffmpeg`, `sox`, `curl`, `xclip`, `xdotool`, `xmessage`, `wmctrl`, `xrandr`, `notify-send`.
+- `arecord`, `sox`, `curl`, `xclip`, `xdotool`, `xmessage`, `wmctrl`, `xrandr`, `notify-send`.
 
 On Debian/Ubuntu/Mint:
 
 ```bash
-sudo apt install ffmpeg sox libsox-fmt-all curl xclip xdotool wmctrl x11-utils x11-xserver-utils libnotify-bin
+sudo apt install alsa-utils sox libsox-fmt-all curl xclip xdotool wmctrl x11-utils x11-xserver-utils libnotify-bin
 ```
 
 ## Install
@@ -58,12 +57,12 @@ Edit the top of `diktuy.sh`:
 
 - `TERMS` — prompt with names and technical terms (up to 500 characters).
 - `API_URL` — Diktuy transcription endpoint.
-- `AUDIO_OGG`, `PID_FILE`, `LOG_FILE`, `LOCK_FILE` — temporary paths.
+- `AUDIO_RAW`, `AUDIO_OGG`, `PID_FILE`, `LOG_FILE`, `LOCK_FILE` — temporary paths.
 
 ## How it works
 
-1. `ffmpeg` records 16 kHz mono OGG Vorbis directly.
-2. `sox` checks the recording for silence.
+1. `arecord` captures 16 kHz mono PCM.
+2. `sox` converts it to OGG.
 3. `curl` uploads it to Diktuy.
 4. `xclip` puts the transcript in the clipboard and `xdotool` sends Shift+Insert.
 5. The previous clipboard is restored.

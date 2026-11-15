@@ -10,6 +10,7 @@ API_URL="https://api.diktuy.ru/v1/audio/transcriptions"
 # Model prompt: your terms, up to 500 characters
 TERMS="Kubernetes, Docker, API, CI/CD, pull request, commit, merge, deploy, backend, frontend, Python, Go, Linux"
 
+AUDIO_RAW="/tmp/diktuy_speech.raw"
 AUDIO_OGG="/tmp/diktuy_speech.ogg"
 PID_FILE="/tmp/diktuy_record.pid"
 LOG_FILE="/tmp/diktuy.log"
@@ -91,9 +92,9 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; t
     close_recording_indicator
     PID=$(cat "$PID_FILE")
 
-    # Let the last syllable reach the encoder, then finalize the OGG
+    # Let the last syllable reach the buffer, then stop arecord
     sleep 0.2
-    kill -INT "$PID" 2>/dev/null
+    kill "$PID" 2>/dev/null
     for _ in {1..20}; do
         kill -0 "$PID" 2>/dev/null || break
         sleep 0.1
@@ -101,24 +102,28 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; t
     kill -9 "$PID" 2>/dev/null
     rm -f "$PID_FILE"
 
-    if [ ! -s "$AUDIO_OGG" ]; then
+    if [ ! -s "$AUDIO_RAW" ]; then
         notify "Dictation" "Empty recording" -i dialog-error
-        rm -f "$AUDIO_OGG"
+        rm -f "$AUDIO_RAW"
         exit 1
     fi
 
     # Check that the microphone actually captured sound
-    AUDIO_STAT=$(sox "$AUDIO_OGG" -n stat 2>&1)
-    if [ $? -ne 0 ]; then
-        notify "Dictation" "Failed to read recording" -i dialog-error
-        rm -f "$AUDIO_OGG"
-        exit 1
-    fi
-    MAX_AMP=$(printf '%s\n' "$AUDIO_STAT" | awk '/Maximum amplitude/ {print $3}')
+    MAX_AMP=$(sox -r 16000 -c 1 -e signed-integer -b 16 -t raw "$AUDIO_RAW" -n stat 2>&1 | awk '/Maximum amplitude/ {print $3}')
     MAX_AMP=${MAX_AMP:-0}
     if awk "BEGIN{exit !($MAX_AMP < 0.0005)}"; then
         notify "Dictation" "Microphone is silent, check the audio source" -i dialog-error
-        rm -f "$AUDIO_OGG"
+        rm -f "$AUDIO_RAW"
+        exit 1
+    fi
+
+    # OGG is about 15 times smaller than WAV, so uploads are much faster
+    rm -f "$AUDIO_OGG"
+    sox -r 16000 -c 1 -e signed-integer -b 16 -t raw "$AUDIO_RAW" -C 3 "$AUDIO_OGG" 2>/dev/null
+    rm -f "$AUDIO_RAW"
+
+    if [ ! -s "$AUDIO_OGG" ]; then
+        notify "Dictation" "Failed to prepare audio" -i dialog-error
         exit 1
     fi
 
@@ -184,13 +189,11 @@ else
         exit 1
     fi
 
-    rm -f "$AUDIO_OGG"
+    rm -f "$AUDIO_RAW"
 
-    # ffmpeg records OGG directly; SIGINT writes the container trailer.
-    # 9>&- closes the lock fd; otherwise ffmpeg holds flock for the entire recording.
-    ffmpeg -hide_banner -loglevel error -nostdin -f pulse -i "${PULSE_SOURCE:-default}" \
-        -ac 1 -ar 16000 -c:a libvorbis -q:a 3 -y "$AUDIO_OGG" \
-        9>&- >/dev/null 2>&1 &
+    # arecord writes raw PCM immediately and does not lose the tail on stop.
+    # 9>&- closes the lock fd; otherwise arecord holds flock for the entire recording.
+    arecord -q -D pulse -f S16_LE -r 16000 -c 1 -B 100000 -t raw "$AUDIO_RAW" 2>/dev/null 9>&- &
     REC_PID=$!
 
     echo "$REC_PID" > "$PID_FILE"
