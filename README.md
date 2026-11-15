@@ -1,6 +1,6 @@
 # Diktuy
 
-A small Linux dictation script for the [Diktuy](https://diktuy.ru) speech-to-text API. Press a hotkey, speak, press it again, and the transcript is pasted into the active window.
+A small Linux dictation script for the [Diktuy](https://diktuy.ru) speech-to-text API. Press a hotkey, speak, press it again, and the transcript is pasted into the active window. Built for Russian dictation with English technical terms; edit `TERMS` for your vocabulary.
 
 ## Features
 
